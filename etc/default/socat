@@ -1,0 +1,8 @@
+# Default settings for socat daemon. This file is sourced by /bin/sh from
+# /etc/init.d/socat.
+
+# Flags that will be passed to socat
+# See http://www.dest-unreach.org/socat/doc/socat.html
+# Additional '-d' flags increase logging verbosity
+
+# SOCAT_OPTS="-d -lf /var/log/socat.log"

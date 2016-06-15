@@ -1,0 +1,143 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          socat 
+# Required-Start:    $remote_fs $network $syslog
+# Required-Stop:     $remote_fs $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: SOcket CAT multipurpose relay daemon
+# Description:       Start/stop socat relays based on configuration files in /etc/socat/conf.d
+### END INIT INFO
+
+# Based on https://github.com/asaif/socat-init
+
+set -e
+
+NAME=socat
+SOCAT_BIN=/usr/bin/socat
+SOCAT_OPTS='-d -lf /var/log/socat.log'
+SOCAT_CONF_DIR=/etc/socat/conf.d 
+SOCAT_PID_DIR=/var/run/socat
+
+. /lib/lsb/init-functions
+if test -f /etc/default/socat; then
+    . /etc/default/socat
+fi
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+if [ ! -x $SOCAT_BIN ]; then
+    echo "$SOCAT_BIN is not present and executable. Either install socat or specify correct \$SOCAT_BIN in /etc/default/socat"
+    exit 1
+fi
+
+mkdir -p $SOCAT_CONF_DIR
+mkdir -p $SOCAT_PID_DIR
+
+declare -a relays
+declare -i relay_count
+relay_count=0
+
+read_conf() {
+    if ! (ls $SOCAT_CONF_DIR/*.conf >/dev/null 2>&1); then
+        echo "No .conf files found in $SOCAT_CONF_DIR"
+        return 0
+    fi
+    i=0
+    for file in `ls $SOCAT_CONF_DIR | grep \.conf$`; do
+        id="`basename $file`"
+        id="${i}-${id::-5}"
+        while read -r line; do
+            relays[$i,0]="$id"
+            relays[$i,1]="$line"
+            i=$((i+1))
+        done < <(grep -vE '^(\s*$|#)' $SOCAT_CONF_DIR/$file)
+    done
+    relay_count=$i
+}
+
+socat_start () {
+    read_conf
+    if [[ "$relay_count" == "0" ]]; then
+        echo "No configured relays found in $SOCAT_CONF_DIR/*.conf"
+        exit 0
+    fi
+    exit_sum=0
+    for ((i=0;i<relay_count;i++)) {
+       start-stop-daemon --oknodo --quiet --start \
+            --pidfile $SOCAT_PID_DIR/${relays[$i,0]}.pid \
+            --background --make-pidfile \
+            --exec $SOCAT_BIN -- $SOCAT_OPTS ${relays[$i,1]} < /dev/null
+        ec=$?
+        exit_sum=$((exit_sum+ec))
+    }
+    return $exit_sum
+}
+
+socat_stop () {
+    if ! (ls $SOCAT_PID_DIR/*.pid >/dev/null 2>&1); then
+        echo "No .pid files found in $SOCAT_PID_DIR"
+        return 0
+    fi
+    exit_sum=0
+    for pidfile in `ls $SOCAT_PID_DIR/*.pid`; do
+        start-stop-daemon --oknodo --stop --quiet --pidfile $pidfile --exec $SOCAT_BIN
+        ec=$?
+        exit_sum=$((exit_sum+ec))
+        rm -f $pidfile
+    done
+    return $exit_sum
+}
+
+socat_status () {
+    if ! (ls $SOCAT_PID_DIR/*.pid >/dev/null 2>&1); then 
+        echo "No .pid files found in $SOCAT_PID_DIR"
+        return 0
+    fi
+    exit_sum=0
+    for pidfile in `ls $SOCAT_PID_DIR/*.pid`; do
+        id="`basename $pidfile`"
+        id="${id::-4}"
+        status_of_proc -p $pidfile $SOCAT_BIN "socat:${id}"
+        ec=$?
+        exit_sum=$((exit_sum+ec))
+    done
+    return $exit_sum
+}
+
+case "$1" in
+    start)
+        log_daemon_msg "Starting multipurpose relay" "socat" 
+        if socat_start ; then
+            log_end_msg $?
+        else
+            log_end_msg $?
+        fi
+        ;;
+    stop)
+        log_daemon_msg "Stopping multipurpose relay" "socat"
+        if socat_stop ; then
+           log_end_msg $?
+        else
+           log_end_msg $?
+        fi
+        ;;
+    restart)
+        log_daemon_msg "Restarting multipurpose relay" "socat"
+        socat_stop
+        if socat_start ; then
+            log_end_msg $?
+        else
+            log_end_msg $?
+        fi
+        ;;
+    status)
+        socat_status && exit 0 || exit $?
+        ;;
+    *)
+        echo "Usage: /etc/init.d/socat {start|stop|restart|status}"
+        exit 3
+        ;;
+esac
+
+exit 0
