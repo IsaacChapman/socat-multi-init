@@ -34,7 +34,8 @@ fi
 mkdir -p $SOCAT_CONF_DIR
 mkdir -p $SOCAT_PID_DIR
 
-declare -a relays
+declare -a relays_id
+declare -a relays_line
 declare -i relay_count
 relay_count=0
 
@@ -46,10 +47,9 @@ read_conf() {
     i=0
     for file in `ls $SOCAT_CONF_DIR | grep \.conf$`; do
         id="`basename $file`"
-        id="${i}-${id::-5}"
         while read -r line; do
-            relays[$i,0]="$id"
-            relays[$i,1]="$line"
+            relays_id[$i]="${i}-${id::-5}"
+            relays_line[$i]="$line"
             i=$((i+1))
         done < <(grep -vE '^(\s*$|#)' $SOCAT_CONF_DIR/$file)
     done
