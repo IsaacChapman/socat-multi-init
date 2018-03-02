@@ -34,7 +34,7 @@ fi
 mkdir -p $SOCAT_CONF_DIR
 mkdir -p $SOCAT_PID_DIR
 
-declare -a relays
+declare -A relays
 declare -i relay_count
 relay_count=0
 
